@@ -1,0 +1,2 @@
+# SchindlerRotinaSupervisor
+Rotina do supervisor
