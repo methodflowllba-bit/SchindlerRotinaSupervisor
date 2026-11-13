@@ -75,7 +75,17 @@ async function openAI(path,body,json=false) {
     method:'POST',headers:{Authorization:'Bearer '+apiKey,...(json?{'Content-Type':'application/json'}:{})},
     body,signal:AbortSignal.timeout(100000)
   });
-  if(!response.ok)throw Error('A IA não concluiu o processamento. Tente novamente mais tarde.');
+  if(!response.ok) {
+    const detail=await response.json().catch(()=>({}));
+    const code=String(detail.error?.code || '').slice(0,80);
+    const stage=path==='audio/transcriptions'?'transcrição':'relatório';
+    console.error(JSON.stringify({event:'openai_failure',stage,status:response.status,code,requestId:response.headers.get('x-request-id')}));
+    if(code==='insufficient_quota'||code==='billing_hard_limit_reached')throw Error('A API da OpenAI está sem saldo ou com limite de cobrança atingido. O administrador precisa verificar o faturamento da API. O áudio foi preservado.');
+    if(response.status===401)throw Error('A chave da OpenAI não foi aceita. O administrador precisa revisar OPENAI_API_KEY no Supabase. O áudio foi preservado.');
+    if(response.status===403||code==='model_not_found'||response.status===404)throw Error('A conta da OpenAI não tem acesso ao modelo de '+stage+' configurado. O administrador precisa revisar o modelo e o acesso da chave. O áudio foi preservado.');
+    if(response.status===429)throw Error('A API da OpenAI atingiu um limite temporário. Aguarde um pouco e tente gerar novamente. O áudio foi preservado.');
+    throw Error('Falha na '+stage+' pela OpenAI (HTTP '+response.status+'). O áudio foi preservado; o administrador pode consultar os registros da função.');
+  }
   return await response.json();
 }
 function publicRow(row) {
